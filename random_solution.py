@@ -4,11 +4,25 @@
 # Used to test eval.py.
 from random import random, sample, randrange
 from functools import reduce
-from nltk.tokenize.stanford import StanfordTokenizer
+import os
+from nltk.parse.corenlp import CoreNLPServer, CoreNLPParser
 
-tokenizer = StanfordTokenizer(options={
-    'ptb3Escaping': False
-})
+parser = None
+config = {
+    'isManagingServer': False
+}
+STANFORD = os.path.join("models", "stanford-corenlp-full-2018-10-05")
+server = CoreNLPServer(
+   os.path.join(STANFORD, "stanford-corenlp-3.9.2.jar"),
+   os.path.join(STANFORD, "stanford-corenlp-3.9.2-models.jar"),
+)
+
+def setup(manageServerInternally):
+    config['isManagingServer'] = manageServerInternally
+
+    if manageServerInternally:
+        print("Starting CoreNLP server...")
+        server.start()
 
 # (impossible (bool), starting index, ending index)
 def eval(context, question):
@@ -18,7 +32,7 @@ def eval(context, question):
 
     # Note this adds nothing for spacing:
     textToTokenizedLength = lambda total, word: total + len(word)
-    tokenized = tokenizer.tokenize(context)
+    tokenized = list(parser.tokenize(context))
 
     startingWordIndex = randrange(0, len(tokenized) - 2)
     word = tokenized[startingWordIndex]
@@ -35,3 +49,9 @@ def eval(context, question):
 
     return (False, startingTextIndex, endingTextIndex)
 
+# Teardown code:
+def stop():
+    if config['isManagingServer']:
+        server.stop()
+
+parser = CoreNLPParser(url='http://localhost:9000')

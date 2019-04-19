@@ -1,10 +1,10 @@
 # Network evaluation script
 
 import json
-from pprint import pprint
-from random_solution import eval
+from random_solution import eval, setup, stop
 
 USE_PRODUCTION_DATA = False
+MANAGE_CORENLP_INTERNALLY = False
 
 def evaluate(topics):
     rightTotal = 0
@@ -91,5 +91,11 @@ print("Loading SQuAD Dataset (" + ("Training" if USE_PRODUCTION_DATA else "Dev")
 with open('data/' + fileName) as f:
     data = json.load(f)
 
+print("Preparing model...")
+setup(MANAGE_CORENLP_INTERNALLY)
+
 right, wrong = evaluate(data['data'])
 print("Evaluation complete. Correct: " + str(right) + "/" + str(right + wrong))
+
+print("Stopping dependent systems...")
+stop()
