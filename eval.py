@@ -1,7 +1,7 @@
 # Network evaluation script
 
 import json
-from random_solution import eval, setup, stop
+from ml_type_solution import eval, setup, stop
 
 USE_PRODUCTION_DATA = False
 MANAGE_CORENLP_INTERNALLY = False
