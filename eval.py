@@ -6,7 +6,23 @@ from ml_type_solution import eval, setup, stop
 USE_PRODUCTION_DATA = False
 MANAGE_CORENLP_INTERNALLY = False
 
+totalQuestions = 0
+totalPassages = 0
+answeredQuestions = 0
+answeredPassages = 0
+
+def findBaselineStats(topics):
+    global totalQuestions, totalPassages
+    for topic in topics:
+        for passage in topic['paragraphs']:
+            totalPassages += 1
+
+            for q in passage['qas']:
+                totalQuestions += 1
+
 def evaluate(topics):
+    global answeredPassages, answeredQuestions
+
     rightTotal = 0
     wrongTotal = 0
 
@@ -21,7 +37,9 @@ def evaluate(topics):
             questions = passage['qas']
             rightPassage = 0
             wrongPassage = 0
+            answeredPassages += 1
 
+            print('>>> processing... {0} of {1} Qs, {2} of {3} passages. {4} correct, {5} wrong.'.format(answeredQuestions, totalQuestions, answeredPassages, totalPassages, rightTotal, wrongTotal))
             print('***')
             print(context)
             print('***')
@@ -49,6 +67,7 @@ def evaluate(topics):
                     trainingAnswers = questionObj['answers']
 
                 print(question)
+                answeredQuestions += 1
 
                 evalIsImpossible, evalStartIndex, evalEndIndex = eval(context, question)
                 evalAnswer = context[evalStartIndex:evalEndIndex].strip()
@@ -94,6 +113,7 @@ with open('data/' + fileName) as f:
 print("Preparing model...")
 setup(MANAGE_CORENLP_INTERNALLY)
 
+findBaselineStats(data['data'])
 right, wrong = evaluate(data['data'])
 print("Evaluation complete. Correct: " + str(right) + "/" + str(right + wrong))
 
