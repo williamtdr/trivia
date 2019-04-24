@@ -1,16 +1,16 @@
-# 1. Break out question into its type: who/what/when/where/why/how
-# 2. Train CNN to recognize the answer given words, POS tags, collocated words, answer
+# Pulls noun phrases, selects answer among those, reconstructs in original context
 from __future__ import absolute_import, division, print_function
 from random import random, sample, randrange
 from functools import reduce
 import os
 from nltk.parse.corenlp import CoreNLPServer, CoreNLPParser
+from requests.exceptions import HTTPError
 from pprint import pprint
 
-import tensorflow as tf
-from tensorflow import keras
-import numpy as np
-import matplotlib.pyplot as plt
+# import tensorflow as tf
+# from tensorflow import keras
+# import numpy as np
+# import matplotlib.pyplot as plt
 
 parser = None
 config = {
@@ -29,23 +29,24 @@ def setup(manageServerInternally):
         print("Starting CoreNLP server...")
         server.start()
 
-def whoParser(context, contextPOS, contextTokens, question, questionPOS, questionTokens):
+def extractor(context, contextPOS, contextTokens, question, questionPOS, questionTokens):
     i = -1
     sentOffset = 0
     answers = []
-
-    #todo: characterOffsetBegin is unreliable, returning a number too high most of the type
-    #todo: look into configuration options
 
     for sent in contextPOS:
         i += 1
         potentialAnswers = []
         sentTokens = contextTokens[i]
 
-        sent.pretty_print()
+        # sent.pretty_print()
 
         for t in sent.subtrees(lambda t: t.label() == 'NP'):
             potentialAnswers.append(t)
+#            print(t.leaves())
+
+        if len(potentialAnswers) == 0:
+            continue
 
         randomAnswer = sample(potentialAnswers, 1)[0]
         startingTokenTree = list(filter(lambda token: next(randomAnswer.subtrees(lambda t:
@@ -54,13 +55,68 @@ def whoParser(context, contextPOS, contextTokens, question, questionPOS, questio
                                                                         token['originalText'] in list(t.leaves())),
                                                   False), sentTokens))
 
-        startingToken = " ".join(randomAnswer.leaves())
-        print(startingToken)
-        print(startingTokenTree[0]['characterOffsetBegin'])
+        def accumulateLongestSequence(acc, token):
+            if type(acc) == dict:
+                sequenceOne = accumulateLongestSequence(None, acc)
+
+                return accumulateLongestSequence(sequenceOne, token)
+
+            if acc == None:
+                return [ [ token ] ]
+
+            lastSequence = acc[-1]
+            lastTokenInSequence = lastSequence[-1]
+
+            if lastTokenInSequence['index'] + 1 == token['index']:
+                acc[-1].append(token)
+            else:
+                acc.append([token])
+
+            return acc
+
+        startingIndex = -1
+        def accumulateString(acc, token):
+            global startingIndex
+
+            if type(acc) == dict:
+                if startingIndex == -1:
+                    startingIndex = acc['characterOffsetBegin']
+
+                sequenceOne = accumulateString("", acc)
+
+                return accumulateString(sequenceOne, token)
+
+            before, after, text = token['before'], token['after'], token['originalText']
+
+            if acc == None:
+                acc = ""
+
+            if acc[-len(before):] != before:
+                acc += before
+
+            acc += text
+            acc += after
+
+            return acc
+
+        sequences = reduce(accumulateLongestSequence, startingTokenTree, None)
+        longestSequenceAsTokens = None
+        if sequences:
+            longestSequence = reduce(lambda acc, seq: seq if len(seq) > len(acc) else acc, sequences)
+            longestSequenceAsTokens = reduce(accumulateString, longestSequence, "").strip()
+
         try:
-            index = context.index(startingToken, int(startingTokenTree[0]['characterOffsetBegin'] - 1))
-            answers.append((index, startingToken))
+            if not longestSequenceAsTokens:
+                raise ValueError()
+
+            index = context.index(longestSequenceAsTokens)
+            answers.append((index, longestSequenceAsTokens))
         except ValueError:
+            print("***")
+            if longestSequenceAsTokens:
+                print(longestSequenceAsTokens.strip())
+
+            print(context)
             print("couldn't reconstruct original phrase :(")
 
         sentOffset += sentTokens[-1]['characterOffsetBegin']
@@ -75,28 +131,31 @@ def whoParser(context, contextPOS, contextTokens, question, questionPOS, questio
 
         return (False, finalAnswer[0], len(finalAnswer[1]) + finalAnswer[0])
 
-def whatParser(contextTokenized, questionTokenized):
-    pass
-
-def whenParser(contextTokenized, questionTokenized):
-    pass
-
-def whereParser(contextTokenized, questionTokenized):
-    pass
-
-def howParser(contextTokenized, questionTokenized):
-    pass
+contextCache = {}
 
 # (impossible (bool), starting index, ending index)
 def eval(context, question):
     questionParsed = parser.api_call(question, properties={
-        'annotators': 'tokenize,ssplit,parse',
+        'outputFormat': 'json',
+        'annotators': 'tokenize,parse',
         'tokenizer.ptb3Escaping': 'false'
     })
-    contextParsed = parser.api_call(context, properties={
-        'annotators': 'tokenize,ssplit,parse',
-        'tokenizer.ptb3Escaping': 'false'
-    })
+
+    if context in contextCache:
+        contextParsed = contextCache[context]
+    else:
+        try:
+            contextParsed = parser.api_call(context, properties={
+                'outputFormat': 'json',
+                'annotators': 'tokenize,parse',
+                'tokenizer.ptb3Escaping': 'false'
+            })
+            contextCache[context] = contextParsed
+        except HTTPError:
+            print("CoreNLP parse failed, retrying...")
+
+            return eval(context, question)
+
     questionPOS = None
     questionTokens = None
 
@@ -104,15 +163,11 @@ def eval(context, question):
         questionPOS = parser.make_tree(parsed_sent)
         questionTokens = parsed_sent['tokens']
 
-    context = list(map(lambda parsed_sent: (parser.make_tree(parsed_sent), parsed_sent['tokens']), contextParsed['sentences']))
-    contextPOS = list(map(lambda x: x[0], context))
-    contextTokens = list(map(lambda x: x[1], context))
+    contextResponse = list(map(lambda parsed_sent: (parser.make_tree(parsed_sent), parsed_sent['tokens']), contextParsed['sentences']))
+    contextPOS = list(map(lambda x: x[0], contextResponse))
+    contextTokens = list(map(lambda x: x[1], contextResponse))
 
-    print(contextPOS)
-
-    return whoParser(context, contextPOS, contextTokens, question, questionPOS, questionTokens)
-
-    return (True, 0, 0)
+    return extractor(context, contextPOS, contextTokens, question, questionPOS, questionTokens)
 
 # Teardown code:
 def stop():
