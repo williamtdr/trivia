@@ -1,7 +1,7 @@
 # Network evaluation script
 
 import json
-from ml_type_solution import eval, setup, stop
+from ie_solution import eval, setup, stop
 
 USE_PRODUCTION_DATA = False
 MANAGE_CORENLP_INTERNALLY = False
@@ -66,7 +66,7 @@ def evaluate(topics):
                 if 'answers' in questionObj:
                     trainingAnswers = questionObj['answers']
 
-                print(question)
+                # print(question)
                 answeredQuestions += 1
 
                 evalIsImpossible, evalStartIndex, evalEndIndex = eval(context, question)

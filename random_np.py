@@ -43,7 +43,7 @@ def extractor(context, contextPOS, contextTokens, question, questionPOS, questio
 
         for t in sent.subtrees(lambda t: t.label() == 'NP'):
             potentialAnswers.append(t)
-#            print(t.leaves())
+            # print(t.leaves())
 
         if len(potentialAnswers) == 0:
             continue
@@ -135,9 +135,10 @@ contextCache = {}
 
 # (impossible (bool), starting index, ending index)
 def eval(context, question):
+    # todo: ner
     questionParsed = parser.api_call(question, properties={
         'outputFormat': 'json',
-        'annotators': 'tokenize,parse',
+        'annotators': 'tokenize,parse,ner',
         'tokenizer.ptb3Escaping': 'false'
     })
 
@@ -147,7 +148,7 @@ def eval(context, question):
         try:
             contextParsed = parser.api_call(context, properties={
                 'outputFormat': 'json',
-                'annotators': 'tokenize,parse',
+                'annotators': 'tokenize,parse,ner',
                 'tokenizer.ptb3Escaping': 'false'
             })
             contextCache[context] = contextParsed
