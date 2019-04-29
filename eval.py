@@ -69,7 +69,14 @@ def evaluate(topics):
                 # print(question)
                 answeredQuestions += 1
 
-                evalIsImpossible, evalStartIndex, evalEndIndex = eval(context, question)
+                answers = []
+                if trainingAnswers:
+                    for potentialSolutionObj in trainingAnswers:
+                        answers.append(potentialSolutionObj['text'])
+
+                answers = list(set(answers))
+
+                evalIsImpossible, evalStartIndex, evalEndIndex = eval(context, question, answers)
                 evalAnswer = context[evalStartIndex:evalEndIndex].strip()
                 lastTrainingAnswer = None
 

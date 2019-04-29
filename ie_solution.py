@@ -6,6 +6,7 @@ import os
 from nltk.parse.corenlp import CoreNLPServer, CoreNLPParser
 from requests.exceptions import HTTPError
 from pprint import pprint
+import itertools
 
 # import tensorflow as tf
 # from tensorflow import keras
@@ -21,6 +22,9 @@ server = CoreNLPServer(
    os.path.join(STANFORD, "stanford-corenlp-3.9.2.jar"),
    os.path.join(STANFORD, "stanford-corenlp-3.9.2-models.jar"),
 )
+numPossible = 0
+numImpossible = 0
+numPossibleWithRelevantSentences = 0
 
 def setup(manageServerInternally):
     config['isManagingServer'] = manageServerInternally
@@ -38,7 +42,10 @@ def extractor(context,
               questionPOS,
               questionTokens,
               questionNamedEntities,
-              questionInformationExtraction):
+              questionInformationExtraction,
+              realAnswers=None):
+    global numImpossible, numPossible, numPossibleWithRelevantSentences
+
     def accumulateLongestSequence(acc, token):
         if type(acc) == dict:
             sequenceOne = accumulateLongestSequence(None, acc)
@@ -58,15 +65,8 @@ def extractor(context,
 
         return acc
 
-    # todo: this is a gross dependency
-    startingIndex = -1
     def accumulateString(acc, token):
-        global startingIndex
-
         if type(acc) == dict:
-            if startingIndex == -1:
-                startingIndex = acc['characterOffsetBegin']
-
             sequenceOne = accumulateString("", acc)
 
             return accumulateString(sequenceOne, token)
@@ -85,9 +85,9 @@ def extractor(context,
         return acc
 
     i = -1
-    sentOffset = 0
     answers = []
     knowledgeBase = {}
+    allPotentialSubjects = []
 
     print("ANALYSIS OF QUESTION:")
     questionPOS.pretty_print()
@@ -98,23 +98,18 @@ def extractor(context,
     print("QUESTION INFORMATION EXTRACTION:")
     print(questionInformationExtraction)
 
-    namedEntityOfInterest = None
     if len(questionNamedEntities) > 0:
-        namedEntityOfInterest = sample(questionNamedEntities, 1)[0]['text']
+        allPotentialSubjects += list(map(lambda x: x['text'], questionNamedEntities))
 
-    if len(questionInformationExtraction) > 0 and namedEntityOfInterest == None:
-        print("WARN: Falling back to information extraction mehtod...")
-        ieSubject = sample(questionInformationExtraction, 1)[0]
-        namedEntityOfInterest = ieSubject['subject']
+    if len(questionInformationExtraction) > 0:
+        allPotentialSubjects += list(map(lambda x: x['subject'], questionInformationExtraction))
 
-    if namedEntityOfInterest == None:
-        potentialSubjects = []
+    potentialSubjects = []
+    for t in questionPOS.subtrees(lambda t: t.label() == 'NP'):
+        potentialSubjects.append(t)
 
-        for t in questionPOS.subtrees(lambda t: t.label() == 'NP'):
-            potentialSubjects.append(t)
-
-        if len(potentialSubjects) > 0:
-            subject = sample(potentialSubjects, 1)[0]
+    if len(potentialSubjects) > 0:
+        for subject in potentialSubjects:
             startingTokenTree = list(filter(lambda token: next(subject.subtrees(lambda t:
                  t.label() == token['pos'] and token['originalText'] in list(t.leaves())), False), questionTokens))
             sequences = reduce(accumulateLongestSequence, startingTokenTree, None)
@@ -122,18 +117,18 @@ def extractor(context,
             if sequences:
                 longestSequence = reduce(lambda acc, seq: seq if len(seq) > len(acc) else acc, sequences)
                 longestSequenceAsTokens = reduce(accumulateString, longestSequence, "").strip()
+                allPotentialSubjects += [ longestSequenceAsTokens ]
 
-                namedEntityOfInterest = longestSequenceAsTokens
+    allPotentialSubjects = list(set(allPotentialSubjects))
+    allPotentialSubjects.sort(key=len, reverse=True)
 
-    if namedEntityOfInterest == None:
-        print("WARN: No named entity of interest!")
-    else:
-        print("NAMED ENTITY OF INTEREST:")
-        print(namedEntityOfInterest)
+    print("ALL POTENTIAL SUBJECTS:")
+    print(allPotentialSubjects)
 
     for sent in contextPOS:
         i += 1
         potentialAnswers = []
+        potentialSentences = []
         sentTokens = contextTokens[i]
         sentInformation = contextInformationExtraction[i]
 
@@ -151,45 +146,83 @@ def extractor(context,
             potentialAnswers.append(t)
 #            print(t.leaves())
 
-        if len(potentialAnswers) == 0:
-            continue
+        for answer in potentialAnswers:
+            startingTokenTree = list(filter(lambda token: next(answer.subtrees(lambda t:
+                t.label() == token['pos'] and token['originalText'] in list(t.leaves())), False), sentTokens))
+            sequences = reduce(accumulateLongestSequence, startingTokenTree, None)
+            longestSequenceAsTokens = None
 
-        randomAnswer = sample(potentialAnswers, 1)[0]
-        startingTokenTree = list(filter(lambda token: next(randomAnswer.subtrees(lambda t:
-            t.label() == token['pos'] and token['originalText'] in list(t.leaves())), False), sentTokens))
+            if sequences:
+                longestSequence = reduce(lambda acc, seq: seq if len(seq) > len(acc) else acc, sequences)
+                longestSequenceAsTokens = reduce(accumulateString, longestSequence, "").strip()
 
-        startingIndex = -1
-        sequences = reduce(accumulateLongestSequence, startingTokenTree, None)
-        longestSequenceAsTokens = None
-        if sequences:
-            longestSequence = reduce(lambda acc, seq: seq if len(seq) > len(acc) else acc, sequences)
-            longestSequenceAsTokens = reduce(accumulateString, longestSequence, "").strip()
-        try:
-            if not longestSequenceAsTokens:
-                raise AssertionError("No noun phrase found in sentence:")
-            # print("KNOWLEDGE BASE:")
-            # print(knowledgeBase)
-
-            if namedEntityOfInterest != None and namedEntityOfInterest not in " ".join(sent.leaves()):
-                raise AssertionError("Named entity not found in sentence:")
-
-            index = context.index(longestSequenceAsTokens)
-            answers.append((index, longestSequenceAsTokens))
-        except AssertionError as e:
-            print(e.args[0])
             fullContext = reduce(accumulateString, sentTokens, "").strip()
+            try:
+                if not longestSequenceAsTokens:
+                    raise AssertionError("No noun phrase found in sentence:")
 
-            print(fullContext)
-        except ValueError:
-            print("***")
-            if longestSequenceAsTokens:
-                print(longestSequenceAsTokens.strip())
+                if not any(entity in fullContext for entity in allPotentialSubjects):
+                    raise AssertionError("No named entity not found in sentence:")
 
-            print(context)
-            print("couldn't reconstruct original phrase :(")
+                index = context.index(longestSequenceAsTokens)
+                answers.append((index, longestSequenceAsTokens))
 
-        sentOffset += sentTokens[-1]['characterOffsetBegin']
-        sentOffset += len(sentTokens[-1]['originalText'])
+                if fullContext not in potentialSentences:
+                    potentialSentences.append(fullContext)
+            except AssertionError as e:
+                print(e.args[0])
+                print(fullContext)
+
+                break
+            except ValueError:
+                print("***")
+                if longestSequenceAsTokens:
+                    print(longestSequenceAsTokens.strip())
+
+                print(context)
+                print("couldn't reconstruct original phrase :(")
+
+    print(potentialSentences)
+    print("Relevant context judgement: {0}/{1} relevant sentences".format(len(potentialSentences), len(contextPOS)))
+    flatKnowledgeBase = list(itertools.chain.from_iterable(knowledgeBase.values()))
+    simpleFlatKnowledgeBase = list(map(lambda x: (x['subject'], x['relation'], x['object']), flatKnowledgeBase))
+    hasAnswerInKnowledgeBase = any((entity in x for x in simpleFlatKnowledgeBase)
+        for entity in allPotentialSubjects)
+
+    if realAnswers != None:
+        if len(realAnswers) > 0:
+            if any(realAnswer in map(lambda x: x[1], answers) for realAnswer in realAnswers):
+                print("Real answer in answers db.")
+                numPossible += 1
+            elif any((realAnswer in x for x in potentialSentences)
+                for realAnswer in realAnswers):
+                print("Possible with relevant sentence.")
+                numPossibleWithRelevantSentences += 1
+            elif not any(realAnswer in map(lambda x: x[1], answers) for realAnswer in realAnswers):
+                print("Real answer not found in answers db.")
+                numPossibleWithRelevantSentences += 1
+            else:
+                print("Question not answerable with current strategies.")
+                numImpossible += 1
+        else:
+            print("Question is impossible, so accessible by default...")
+            numPossible += 1
+
+        print(
+            "possible with noun phrases={0}, possible with sentence context={1}, impossible by current standards={2}, total={3}".format(
+                numPossible,
+                numPossibleWithRelevantSentences,
+                numImpossible,
+                numImpossible + numPossible + numPossibleWithRelevantSentences
+        ))
+
+    if not hasAnswerInKnowledgeBase:
+        print("Returning false because no answer in knowledge base.")
+        return (True, 0, 0)
+
+    answers = list(set(answers))
+    print("All potential answers:")
+    print(answers)
 
     if len(answers) == 0:
         print("warning: couldn't find an answer!!!")
@@ -206,8 +239,9 @@ def extractor(context,
 contextCache = {}
 
 # (impossible (bool), starting index, ending index)
-def eval(context, question):
-    # todo: ner, dep extraction
+# answer can be provided for obtaining stats about
+def eval(context, question, answers=None):
+    # todo: dependency tree stuff
     questionParsed = parser.api_call(question, properties={
         'outputFormat': 'json',
         'annotators': 'tokenize,parse,ner,natlog,openie',
@@ -258,7 +292,8 @@ def eval(context, question):
                      questionPOS,
                      questionTokens,
                      questionNamedEntities,
-                     questionInformationExtraction)
+                     questionInformationExtraction,
+                     answers)
 
 # Teardown code:
 def stop():
