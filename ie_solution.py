@@ -25,6 +25,7 @@ server = CoreNLPServer(
 numPossible = 0
 numImpossible = 0
 numPossibleWithRelevantSentences = 0
+numIntentionallyImpossible = 0
 
 def setup(manageServerInternally):
     config['isManagingServer'] = manageServerInternally
@@ -44,7 +45,7 @@ def extractor(context,
               questionNamedEntities,
               questionInformationExtraction,
               realAnswers=None):
-    global numImpossible, numPossible, numPossibleWithRelevantSentences
+    global numImpossible, numPossible, numPossibleWithRelevantSentences, numIntentionallyImpossible
 
     def accumulateLongestSequence(acc, token):
         if type(acc) == dict:
@@ -124,11 +125,11 @@ def extractor(context,
 
     print("ALL POTENTIAL SUBJECTS:")
     print(allPotentialSubjects)
+    potentialSentences = []
 
     for sent in contextPOS:
         i += 1
         potentialAnswers = []
-        potentialSentences = []
         sentTokens = contextTokens[i]
         sentInformation = contextInformationExtraction[i]
 
@@ -198,22 +199,19 @@ def extractor(context,
                 for realAnswer in realAnswers):
                 print("Possible with relevant sentence.")
                 numPossibleWithRelevantSentences += 1
-            elif not any(realAnswer in map(lambda x: x[1], answers) for realAnswer in realAnswers):
-                print("Real answer not found in answers db.")
-                numPossibleWithRelevantSentences += 1
             else:
                 print("Question not answerable with current strategies.")
                 numImpossible += 1
         else:
-            print("Question is impossible, so accessible by default...")
-            numPossible += 1
+            numIntentionallyImpossible += 1
 
         print(
-            "possible with noun phrases={0}, possible with sentence context={1}, impossible by current standards={2}, total={3}".format(
+            "possible with noun phrases={0}, possible with sentence context={1}, intentionally impossible = {2}, impossible by current standards={3}, total={4}".format(
                 numPossible,
                 numPossibleWithRelevantSentences,
+                numIntentionallyImpossible,
                 numImpossible,
-                numImpossible + numPossible + numPossibleWithRelevantSentences
+                numImpossible + numPossible + numPossibleWithRelevantSentences + numIntentionallyImpossible
         ))
 
     if not hasAnswerInKnowledgeBase:
