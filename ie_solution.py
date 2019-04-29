@@ -162,7 +162,7 @@ def extractor(context,
                 if not longestSequenceAsTokens:
                     raise AssertionError("No noun phrase found in sentence:")
 
-                if not any(entity in fullContext for entity in allPotentialSubjects):
+                if not any(entity.lower() in fullContext.lower() for entity in allPotentialSubjects):
                     raise AssertionError("No named entity not found in sentence:")
 
                 index = context.index(longestSequenceAsTokens)
