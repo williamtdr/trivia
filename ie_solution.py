@@ -186,16 +186,16 @@ def extractor(context,
     print(potentialSentences)
     print("Relevant context judgement: {0}/{1} relevant sentences".format(len(potentialSentences), len(contextPOS)))
     flatKnowledgeBase = list(itertools.chain.from_iterable(knowledgeBase.values()))
-    simpleFlatKnowledgeBase = list(map(lambda x: (x['subject'], x['relation'], x['object']), flatKnowledgeBase))
-    hasAnswerInKnowledgeBase = any((entity in x for x in simpleFlatKnowledgeBase)
+    simpleFlatKnowledgeBase = list(map(lambda x: (x['subject'].lower(), x['relation'].lower(), x['object'].lower()), flatKnowledgeBase))
+    hasAnswerInKnowledgeBase = any((entity.lower() in x for x in simpleFlatKnowledgeBase)
         for entity in allPotentialSubjects)
 
     if realAnswers != None:
         if len(realAnswers) > 0:
-            if any(realAnswer in map(lambda x: x[1], answers) for realAnswer in realAnswers):
+            if any(realAnswer.lower() in map(lambda x: x[1].lower(), answers) for realAnswer in realAnswers):
                 print("Real answer in answers db.")
                 numPossible += 1
-            elif any((realAnswer in x for x in potentialSentences)
+            elif any((realAnswer.lower() in x.lower() for x in potentialSentences)
                 for realAnswer in realAnswers):
                 print("Possible with relevant sentence.")
                 numPossibleWithRelevantSentences += 1

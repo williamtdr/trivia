@@ -96,7 +96,7 @@ def evaluate(topics):
                             continue
 
                         # start == evalStartIndex?
-                        if text.strip() == evalAnswer:
+                        if text.strip().lower() == evalAnswer.lower():
                             foundCorrectAnswer = True
                             rightPassage += 1
                             rightTopic += 1
