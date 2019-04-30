@@ -24,10 +24,6 @@ server = CoreNLPServer(
    os.path.join(STANFORD, "stanford-corenlp-3.9.2.jar"),
    os.path.join(STANFORD, "stanford-corenlp-3.9.2-models.jar"),
 )
-numPossible = 0
-numImpossible = 0
-numPossibleWithRelevantSentences = 0
-numIntentionallyImpossible = 0
 
 def setup(manageServerInternally):
     config['isManagingServer'] = manageServerInternally
@@ -56,9 +52,6 @@ def extractor(context,
               questionNamedEntities,
               questionInformationExtraction,
               realAnswers=None):
-    # todo: integrate these numbers as non-global
-    global numImpossible, numPossible, numPossibleWithRelevantSentences, numIntentionallyImpossible
-
     def accumulateLongestSequence(acc, token):
         if type(acc) == dict:
             sequenceOne = accumulateLongestSequence(None, acc)
@@ -100,6 +93,12 @@ def extractor(context,
     i = -1
     answers = []
     knowledgeBase = {}
+    nextGlobalStats = {
+        'numImpossible': 0,
+        'numPossible': 0,
+        'numPossibleWithRelevantSentences': 0,
+        'numIntentionallyImpossible': 0,
+    }
     allPotentialSubjects = []
 
     print("ANALYSIS OF QUESTION:")
@@ -221,45 +220,38 @@ def extractor(context,
     simpleFlatKnowledgeBase = list(map(lambda x: (x['subject'].lower(), x['relation'].lower(), x['object'].lower()), flatKnowledgeBase))
     hasAnswerInKnowledgeBase = any((entity.lower() in x for x in simpleFlatKnowledgeBase)
         for entity in allPotentialSubjects)
+    answers = list(set(answers))
 
     print("FEASIBILITY ANALYSIS:")
     if realAnswers != None:
         if len(realAnswers) > 0:
             if any(realAnswer.lower() in map(lambda x: x[1].lower(), answers) for realAnswer in realAnswers):
                 print("Real answer in answers db.")
-                numPossible += 1
+                nextGlobalStats['numPossible'] += 1
             elif any((realAnswer.lower() in x.lower() for x in potentialSentences)
                 for realAnswer in realAnswers):
                 print("Possible with relevant sentence.")
-                numPossibleWithRelevantSentences += 1
+                nextGlobalStats['numPossibleWithRelevantSentences'] += 1
             else:
                 print("Question not answerable with current strategies.")
-                numImpossible += 1
+                nextGlobalStats['numImpossible'] += 1
         else:
-            numIntentionallyImpossible += 1
-
-        print(f"possible with noun phrases={numPossible}, "
-            f"possible with sentence context={numPossibleWithRelevantSentences}, "
-            f"intentionally impossible={numIntentionallyImpossible}, "
-            f"impossible by current standards={numImpossible}, "
-            f"total={numImpossible + numPossible + numPossibleWithRelevantSentences + numIntentionallyImpossible}")
+            nextGlobalStats['numIntentionallyImpossible'] += 1
 
     if not hasAnswerInKnowledgeBase:
         print("No subjects found in knowledge base.")
 
-        return (True, 0, 0)
+        return (True, 0, 0, nextGlobalStats)
 
     if len(potentialSentences) == 0:
         print("No relevant context found.")
 
-        return (True, 0, 0)
-
-    answers = list(set(answers))
+        return (True, 0, 0, nextGlobalStats)
 
     if len(answers) == 0:
         print("No answers found.")
 
-        return (True, 0, 0)
+        return (True, 0, 0, nextGlobalStats)
     else:
         print("ALL POTENTIAL ANSWERS:")
         print(answers)
@@ -269,7 +261,7 @@ def extractor(context,
         print("FINAL ANSWER:")
         print(finalAnswer)
 
-        return (False, finalAnswer[0], len(finalAnswer[1]) + finalAnswer[0])
+        return (False, finalAnswer[0], len(finalAnswer[1]) + finalAnswer[0], nextGlobalStats)
 
 contextCache = {}
 
