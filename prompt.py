@@ -26,13 +26,17 @@ def prompt():
     print("Welcome!")
     contentinput = content()
     opt = option()
-#    print ("what is my answer", opt['options'])
-    if opt['options']== "Ask a question":
+
+    if opt['options'] == "Ask a question":
         Q = [inquirer.Text('question', message="Please type your question")]
         question = inquirer.prompt(Q)['question']
-        print ("your question is ", question)
-        answer = eval(contentinput,question)
-        print (answer)
+        answer = eval(contentinput, question)
+        if answer[0]:
+            # todo: highlight the answer in the original text
+            print(f">>> Model predicted: {answer[2]} starting at {answer[1]} in text.")
+        else:
+            print(">>> Model predicted: question is impossible.")
+
         option()
         prompt()
     elif opt['options'] == "Load new context":
