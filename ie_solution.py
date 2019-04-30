@@ -56,6 +56,7 @@ def extractor(context,
               questionNamedEntities,
               questionInformationExtraction,
               realAnswers=None):
+    # todo: integrate these numbers as non-global
     global numImpossible, numPossible, numPossibleWithRelevantSentences, numIntentionallyImpossible
 
     def accumulateLongestSequence(acc, token):
@@ -143,14 +144,28 @@ def extractor(context,
         potentialAnswers = []
         sentTokens = contextTokens[i]
         sentInformation = contextInformationExtraction[i]
+        sentNamedEntities = contextNamedEntities[i]
+        fullContext = reduce(accumulateString, sentTokens, "").strip()
 
         for item in sentInformation:
             object = item['object']
+            subject = item['subject']
+
+            if subject in allPotentialSubjects or object in allPotentialSubjects:
+                if fullContext not in potentialSentences:
+                    potentialSentences.append(fullContext)
 
             if object in knowledgeBase:
                 knowledgeBase[object].append(item)
             else:
                 knowledgeBase[object] = [ item ]
+
+        for item in sentNamedEntities:
+            text = item['text']
+
+            if text in allPotentialSubjects:
+                if fullContext not in potentialSentences:
+                    potentialSentences.append(fullContext)
 
         # sent.pretty_print()
 
@@ -168,7 +183,6 @@ def extractor(context,
                 longestSequence = reduce(lambda acc, seq: seq if len(seq) > len(acc) else acc, sequences)
                 longestSequenceAsTokens = reduce(accumulateString, longestSequence, "").strip()
 
-            fullContext = reduce(accumulateString, sentTokens, "").strip()
             try:
                 if not longestSequenceAsTokens:
                     raise AssertionError("No noun phrases in sentence, eliminating:")
