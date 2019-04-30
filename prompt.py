@@ -64,6 +64,7 @@ def prompt():
 
         return
 
+setup(False)
 print("Welcome!")
 content()
 prompt()
