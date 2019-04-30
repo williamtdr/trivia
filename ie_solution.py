@@ -197,8 +197,12 @@ def extractor(context,
 
 
     print("RELEVANT CONTEXT JUDGMENT:")
-    print("{0}/{1} relevant sentences. The following will be passed as context:".format(len(potentialSentences), len(contextPOS)))
-    print(*potentialSentences)
+    if len(potentialSentences) == 0:
+        print("No relevant sentences.")
+    else:
+        print("{0}/{1} relevant sentences. The following will be passed as context:".format(len(potentialSentences), len(contextPOS)))
+        print(*potentialSentences)
+
     flatKnowledgeBase = list(itertools.chain.from_iterable(knowledgeBase.values()))
     simpleFlatKnowledgeBase = list(map(lambda x: (x['subject'].lower(), x['relation'].lower(), x['object'].lower()), flatKnowledgeBase))
     hasAnswerInKnowledgeBase = any((entity.lower() in x for x in simpleFlatKnowledgeBase)
@@ -227,12 +231,12 @@ def extractor(context,
             f"total={numImpossible + numPossible + numPossibleWithRelevantSentences + numIntentionallyImpossible}")
 
     if not hasAnswerInKnowledgeBase:
-        print("No subjects found in knowledge base. Question is impossible.")
+        print("No subjects found in knowledge base.")
 
         return (True, 0, 0)
 
     if len(potentialSentences) == 0:
-        print("No relevant context found. Question is impossible.")
+        print("No relevant context found.")
 
         return (True, 0, 0)
 
