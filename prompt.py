@@ -47,6 +47,8 @@ def prompt():
     elif opt['options'] == "Quit":
         exit(0)
 
+        return
+
 prompt()
 
 #print(question)

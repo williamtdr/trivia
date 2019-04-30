@@ -227,7 +227,13 @@ def extractor(context,
             f"total={numImpossible + numPossible + numPossibleWithRelevantSentences + numIntentionallyImpossible}")
 
     if not hasAnswerInKnowledgeBase:
-        print("Returning false because no answer in knowledge base.")
+        print("No subjects found in knowledge base. Question is impossible.")
+
+        return (True, 0, 0)
+
+    if len(potentialSentences) == 0:
+        print("No relevant context found. Question is impossible.")
+
         return (True, 0, 0)
 
     answers = list(set(answers))
