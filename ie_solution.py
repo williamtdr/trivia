@@ -7,6 +7,7 @@ from nltk.parse.corenlp import CoreNLPServer, CoreNLPParser
 from requests.exceptions import HTTPError
 from pprint import pprint
 import itertools
+import requests
 
 # import tensorflow as tf
 # from tensorflow import keras
@@ -15,7 +16,8 @@ import itertools
 
 parser = None
 config = {
-    'isManagingServer': False
+    'isManagingServer': False,
+    'debugSentenceElimination': False
 }
 STANFORD = os.path.join("models", "stanford-corenlp-full-2018-10-05")
 server = CoreNLPServer(
@@ -33,6 +35,15 @@ def setup(manageServerInternally):
     if manageServerInternally:
         print("Starting CoreNLP server...")
         server.start()
+    else:
+        try:
+            print("Checking connection to CoreNLP server...")
+            requests.get('http://localhost:9000/live')
+        except BaseException:
+            print("Error connecting to CoreNLP instance! Make sure the server is running in the background.")
+            print("The relvant command can be found in the README.")
+            exit(1)
+
 
 def extractor(context,
               contextPOS,
@@ -160,10 +171,10 @@ def extractor(context,
             fullContext = reduce(accumulateString, sentTokens, "").strip()
             try:
                 if not longestSequenceAsTokens:
-                    raise AssertionError("No noun phrase found in sentence:")
+                    raise AssertionError("No noun phrases in sentence, eliminating:")
 
                 if not any(entity.lower() in fullContext.lower() for entity in allPotentialSubjects):
-                    raise AssertionError("No named entity not found in sentence:")
+                    raise AssertionError("No named entity found in sentence, eliminating:")
 
                 index = context.index(longestSequenceAsTokens)
                 answers.append((index, longestSequenceAsTokens))
@@ -171,8 +182,9 @@ def extractor(context,
                 if fullContext not in potentialSentences:
                     potentialSentences.append(fullContext)
             except AssertionError as e:
-                print(e.args[0])
-                print(fullContext)
+                if config['debugSentenceElimination']:
+                    print(e.args[0])
+                    print(fullContext)
 
                 break
             except ValueError:
@@ -183,13 +195,16 @@ def extractor(context,
                 print(context)
                 print("couldn't reconstruct original phrase :(")
 
-    print(potentialSentences)
-    print("Relevant context judgement: {0}/{1} relevant sentences".format(len(potentialSentences), len(contextPOS)))
+
+    print("RELEVANT CONTEXT JUDGMENT:")
+    print("{0}/{1} relevant sentences. The following will be passed as context:".format(len(potentialSentences), len(contextPOS)))
+    print(*potentialSentences)
     flatKnowledgeBase = list(itertools.chain.from_iterable(knowledgeBase.values()))
     simpleFlatKnowledgeBase = list(map(lambda x: (x['subject'].lower(), x['relation'].lower(), x['object'].lower()), flatKnowledgeBase))
     hasAnswerInKnowledgeBase = any((entity.lower() in x for x in simpleFlatKnowledgeBase)
         for entity in allPotentialSubjects)
 
+    print("FEASIBILITY ANALYSIS:")
     if realAnswers != None:
         if len(realAnswers) > 0:
             if any(realAnswer.lower() in map(lambda x: x[1].lower(), answers) for realAnswer in realAnswers):
@@ -205,28 +220,26 @@ def extractor(context,
         else:
             numIntentionallyImpossible += 1
 
-        print(
-            "possible with noun phrases={0}, possible with sentence context={1}, intentionally impossible = {2}, impossible by current standards={3}, total={4}".format(
-                numPossible,
-                numPossibleWithRelevantSentences,
-                numIntentionallyImpossible,
-                numImpossible,
-                numImpossible + numPossible + numPossibleWithRelevantSentences + numIntentionallyImpossible
-        ))
+        print(f"possible with noun phrases={numPossible}, "
+            f"possible with sentence context={numPossibleWithRelevantSentences}, "
+            f"intentionally impossible={numIntentionallyImpossible}, "
+            f"impossible by current standards={numImpossible}, "
+            f"total={numImpossible + numPossible + numPossibleWithRelevantSentences + numIntentionallyImpossible}")
 
     if not hasAnswerInKnowledgeBase:
         print("Returning false because no answer in knowledge base.")
         return (True, 0, 0)
 
     answers = list(set(answers))
-    print("All potential answers:")
-    print(answers)
 
     if len(answers) == 0:
-        print("warning: couldn't find an answer!!!")
+        print("No answers found.")
 
         return (True, 0, 0)
     else:
+        print("ALL POTENTIAL ANSWERS:")
+        print(answers)
+
         finalAnswer = sample(answers, 1)[0]
 
         print("FINAL ANSWER:")
@@ -240,6 +253,7 @@ contextCache = {}
 # answer can be provided for obtaining stats about
 def eval(context, question, answers=None):
     # todo: dependency tree stuff
+    print("Requesting parse information from CoreNLP server...")
     questionParsed = parser.api_call(question, properties={
         'outputFormat': 'json',
         'annotators': 'tokenize,parse,ner,natlog,openie',

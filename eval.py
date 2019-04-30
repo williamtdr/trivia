@@ -49,15 +49,15 @@ def evaluate(topics):
 
             def wrong(answer, isActuallyImpossible, evalThinksImpossible, correctAnswer = None):
                 if isActuallyImpossible and not evalThinksImpossible:
-                    return print("wrong. question is impossible. predicted: " + answer)
+                    return print(">>> wrong. question is impossible. predicted: " + answer)
 
                 if answer == '' and not isActuallyImpossible:
-                    return print("wrong. question is fine.")
+                    return print(">>> wrong. question is fine, model predicted as impossible.")
 
                 if correctAnswer != None:
-                    return print("wrong. predicted: " + answer + ", correct: " + correctAnswer)
+                    return print(">>> wrong. predicted: " + answer + ", correct: " + correctAnswer)
                 else:
-                    return print("wrong. predicted: " + answer)
+                    return print(">>> wrong. predicted: " + answer)
 
             for questionObj in questions:
                 question = questionObj['question']
@@ -76,21 +76,25 @@ def evaluate(topics):
 
                 answers = list(set(answers))
 
+                # todo: parallelize
                 evalIsImpossible, evalStartIndex, evalEndIndex = eval(context, question, answers)
                 evalAnswer = context[evalStartIndex:evalEndIndex].strip()
                 lastTrainingAnswer = None
+
+                for potentialSolutionObj in trainingAnswers:
+                    text = potentialSolutionObj['text']
+                    lastTrainingAnswer = text
 
                 if evalIsImpossible != isImpossible:
                     wrongPassage += 1
                     wrongTopic += 1
                     wrongTotal += 1
-                    wrong(evalAnswer, isImpossible, evalIsImpossible)
+                    wrong(evalAnswer, isImpossible, evalIsImpossible, lastTrainingAnswer)
                 else:
                     foundCorrectAnswer = False
                     for potentialSolutionObj in trainingAnswers:
                         start = potentialSolutionObj['answer_start']
                         text = potentialSolutionObj['text']
-                        lastTrainingAnswer = text
 
                         if foundCorrectAnswer:
                             continue
