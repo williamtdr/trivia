@@ -260,6 +260,7 @@ def eval(context, question, answers=None):
         'tokenizer.options': 'ptb3Escaping=false'
     })
 
+    # todo: dump stale items from cache
     if context in contextCache:
         contextParsed = contextCache[context]
     else:
