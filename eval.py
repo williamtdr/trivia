@@ -3,6 +3,7 @@
 import json
 from ie_solution import eval, setup, stop
 import multiprocessing as mp
+import sys
 
 USE_PRODUCTION_DATA = False
 MANAGE_CORENLP_INTERNALLY = False
@@ -13,19 +14,14 @@ answeredQuestions = 0
 
 def findBaselineStats(topics):
     global totalQuestions, totalPassages
+
     for topic in topics:
         for passage in topic['paragraphs']:
             totalPassages += 1
-
-            for q in passage['qas']:
-                totalQuestions += 1
+            totalQuestions += len(passage['qas'])
 
 def evaluatePassage(x):
-    passage = x[0]
-    answeredPassages = x[1]
-    answeredQuestions = x[2]
-    totalQuestions = x[3]
-    totalPassages = x[4]
+    passage, answeredPassages, answeredQuestions, totalQuestions, totalPassages = x
     context = passage['context']
     questions = passage['qas']
     rightPassage = 0
@@ -39,22 +35,22 @@ def evaluatePassage(x):
     print('***')
 
     def right(answer=None):
-        if answer == None:
+        if answer is None:
             print("right! model predicted question is impossible, and it is.")
-
-        print("right! predicted: " + answer)
+        else:
+            print(f"right! predicted: {answer}")
 
     def wrong(answer, isActuallyImpossible, evalThinksImpossible, correctAnswer = None):
         if isActuallyImpossible and not evalThinksImpossible:
-            return print(">>> wrong. question is impossible. predicted: " + answer)
+            return print(f">>> wrong. question is impossible. predicted: {answer}")
 
         if answer == '' and not isActuallyImpossible:
             return print(">>> wrong. question is fine, model predicted as impossible.")
 
-        if correctAnswer != None:
-            return print(">>> wrong. predicted: " + answer + ", correct: " + correctAnswer)
+        if correctAnswer is not None:
+            return print(f">>> wrong. predicted: {answer}, correct: {correctAnswer}")
         else:
-            return print(">>> wrong. predicted: " + answer)
+            return print(f">>> wrong. predicted: {answer}")
 
     for questionObj in questions:
         question = questionObj['question']
@@ -81,6 +77,7 @@ def evaluatePassage(x):
             lastTrainingAnswer = text
 
         if evalIsImpossible and isImpossible:
+            rightPassage += 1
             right()
         elif evalIsImpossible != isImpossible:
             wrongPassage += 1
@@ -153,10 +150,10 @@ def evaluate(topics):
               f"impossible by current standards={numImpossible}, "
               f"total={numImpossible + numPossible + numPossibleWithRelevantSentences + numIntentionallyImpossible}")
 
-    return (rightTotal, wrongTotal)
+    return rightTotal, wrongTotal
 
 fileName = "squad-train-v2.0.json" if USE_PRODUCTION_DATA else "squad-dev-v2.0.json"
-print("Loading SQuAD Dataset (" + ("Training" if USE_PRODUCTION_DATA else "Dev") + ")...")
+print(f"Loading SQuAD Dataset ({'Training' if USE_PRODUCTION_DATA else 'Dev'})...")
 
 with open('data/' + fileName) as f:
     data = json.load(f)
@@ -164,12 +161,18 @@ with open('data/' + fileName) as f:
 print("Preparing model...")
 setup(MANAGE_CORENLP_INTERNALLY)
 
-print(f"Parallelizing based on number of processors: {mp.cpu_count()}")
-pool = mp.Pool(mp.cpu_count())
+cmdLineArgs = sys.argv[1:]
+concurrency = mp.cpu_count()
+if len(cmdLineArgs) >= 1:
+    concurrency = int(cmdLineArgs[0])
+    print(f"Starting {concurrency} threads based on command line argument.")
+else:
+    print(f"Starting {concurrency} threads based on number of processors.")
 
+pool = mp.Pool(concurrency)
 findBaselineStats(data['data'])
 right, wrong = evaluate(data['data'])
-print("Evaluation complete. Correct: " + str(right) + "/" + str(right + wrong))
 
+print(f"Evaluation complete. Correct: {str(right)}/{str(right + wrong)}")
 print("Stopping dependent systems...")
 stop()

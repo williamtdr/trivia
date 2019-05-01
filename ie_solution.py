@@ -17,7 +17,8 @@ import requests
 parser = None
 config = {
     'isManagingServer': False,
-    'debugSentenceElimination': False
+    'debugSentenceElimination': False,
+    'coreNLPServerURL': 'http://localhost:9000'
 }
 STANFORD = os.path.join("models", "stanford-corenlp-full-2018-10-05")
 server = CoreNLPServer(
@@ -34,62 +35,53 @@ def setup(manageServerInternally):
     else:
         try:
             print("Checking connection to CoreNLP server...")
-            requests.get('http://localhost:9000/live')
+            requests.get(f'{config["coreNLPServerURL"]}/live')
         except BaseException:
             print("Error connecting to CoreNLP instance! Make sure the server is running in the background.")
-            print("The relvant command can be found in the README.")
+            print("The relevant command can be found in the README.")
             exit(1)
 
+def accumulateLongestSequence(acc, token):
+    if type(acc) == dict:
+        sequenceOne = accumulateLongestSequence(None, acc)
 
-def extractor(context,
-              contextPOS,
-              contextTokens,
-              contextNamedEntities,
-              contextInformationExtraction,
-              question,
-              questionPOS,
-              questionTokens,
-              questionNamedEntities,
-              questionInformationExtraction,
+        return accumulateLongestSequence(sequenceOne, token)
+
+    if acc is None:
+        return [[token]]
+
+    lastSequence = acc[-1]
+    lastTokenInSequence = lastSequence[-1]
+
+    if lastTokenInSequence['index'] + 1 == token['index']:
+        acc[-1].append(token)
+    else:
+        acc.append([token])
+
+    return acc
+
+def accumulateString(acc, token):
+    if type(acc) == dict:
+        sequenceOne = accumulateString("", acc)
+
+        return accumulateString(sequenceOne, token)
+
+    before, after, text = token['before'], token['after'], token['originalText']
+
+    if acc is None:
+        acc = ""
+
+    if acc[-len(before):] != before:
+        acc += before
+
+    acc += text
+    acc += after
+
+    return acc
+
+def extractor(context, contextPOS, contextTokens, contextNamedEntities, contextInformationExtraction,
+              question, questionPOS, questionTokens, questionNamedEntities, questionInformationExtraction,
               realAnswers=None):
-    def accumulateLongestSequence(acc, token):
-        if type(acc) == dict:
-            sequenceOne = accumulateLongestSequence(None, acc)
-
-            return accumulateLongestSequence(sequenceOne, token)
-
-        if acc == None:
-            return [[token]]
-
-        lastSequence = acc[-1]
-        lastTokenInSequence = lastSequence[-1]
-
-        if lastTokenInSequence['index'] + 1 == token['index']:
-            acc[-1].append(token)
-        else:
-            acc.append([token])
-
-        return acc
-
-    def accumulateString(acc, token):
-        if type(acc) == dict:
-            sequenceOne = accumulateString("", acc)
-
-            return accumulateString(sequenceOne, token)
-
-        before, after, text = token['before'], token['after'], token['originalText']
-
-        if acc == None:
-            acc = ""
-
-        if acc[-len(before):] != before:
-            acc += before
-
-        acc += text
-        acc += after
-
-        return acc
-
     i = -1
     answers = []
     knowledgeBase = {}
@@ -213,11 +205,13 @@ def extractor(context,
     if len(potentialSentences) == 0:
         print("No relevant sentences.")
     else:
-        print("{0}/{1} relevant sentences. The following will be passed as context:".format(len(potentialSentences), len(contextPOS)))
+        print(
+            f"{len(potentialSentences)}/{len(contextPOS)} relevant sentences. The following will be passed as context:")
         print(*potentialSentences)
 
     flatKnowledgeBase = list(itertools.chain.from_iterable(knowledgeBase.values()))
-    simpleFlatKnowledgeBase = list(map(lambda x: (x['subject'].lower(), x['relation'].lower(), x['object'].lower()), flatKnowledgeBase))
+    simpleFlatKnowledgeBase = list(map(lambda x: (x['subject'].lower(), x['relation'].lower(), x['object'].lower()),
+                                       flatKnowledgeBase))
     hasAnswerInKnowledgeBase = any((entity.lower() in x for x in simpleFlatKnowledgeBase)
         for entity in allPotentialSubjects)
     answers = list(set(answers))
@@ -228,8 +222,7 @@ def extractor(context,
             if any(realAnswer.lower() in map(lambda x: x[1].lower(), answers) for realAnswer in realAnswers):
                 print("Real answer in answers db.")
                 nextGlobalStats['numPossible'] += 1
-            elif any((realAnswer.lower() in x.lower() for x in potentialSentences)
-                for realAnswer in realAnswers):
+            elif any((realAnswer.lower() in x.lower() for x in potentialSentences) for realAnswer in realAnswers):
                 print("Possible with relevant sentence.")
                 nextGlobalStats['numPossibleWithRelevantSentences'] += 1
             else:
@@ -257,7 +250,6 @@ def extractor(context,
         print(answers)
 
         finalAnswer = sample(answers, 1)[0]
-
         print("FINAL ANSWER:")
         print(finalAnswer)
 
@@ -268,6 +260,8 @@ contextCache = {}
 # (impossible (bool), starting index, ending index)
 # answer can be provided for obtaining stats about
 def eval(context, question, answers=None):
+    questionPOS, questionTokens, questionNamedEntities, questionInformationExtraction = None, None, None, None
+
     # todo: dependency tree stuff
     print("Requesting parse information from CoreNLP server...")
     questionParsed = parser.api_call(question, properties={
@@ -292,11 +286,6 @@ def eval(context, question, answers=None):
 
             return eval(context, question)
 
-    questionPOS = None
-    questionTokens = None
-    questionNamedEntities = None
-    questionInformationExtraction = None
-
     for parsed_sent in questionParsed['sentences']:
         questionPOS = parser.make_tree(parsed_sent)
         questionTokens = parsed_sent['tokens']
@@ -307,21 +296,12 @@ def eval(context, question, answers=None):
                                                     parsed_sent['tokens'],
                                                     parsed_sent['entitymentions'],
                                                     parsed_sent['openie']), contextParsed['sentences']))
-    contextPOS = list(map(lambda x: x[0], contextResponse))
-    contextTokens = list(map(lambda x: x[1], contextResponse))
-    contextNamedEntities = list(map(lambda x: x[2], contextResponse))
-    contextInformationExtraction = list(map(lambda x: x[3], contextResponse))
+    contextPOS, contextTokens, contextNamedEntities, contextInformationExtraction =\
+        list(map(lambda x: x[0], contextResponse)), list(map(lambda x: x[1], contextResponse)),\
+        list(map(lambda x: x[2], contextResponse)), list(map(lambda x: x[3], contextResponse))
 
-    return extractor(context,
-                     contextPOS,
-                     contextTokens,
-                     contextNamedEntities,
-                     contextInformationExtraction,
-                     question,
-                     questionPOS,
-                     questionTokens,
-                     questionNamedEntities,
-                     questionInformationExtraction,
+    return extractor(context, contextPOS, contextTokens, contextNamedEntities, contextInformationExtraction,
+                     question, questionPOS, questionTokens, questionNamedEntities, questionInformationExtraction,
                      answers)
 
 # Teardown code:
@@ -329,4 +309,4 @@ def stop():
     if config['isManagingServer']:
         server.stop()
 
-parser = CoreNLPParser(url='http://localhost:9000')
+parser = CoreNLPParser(url=config['coreNLPServerURL'])
