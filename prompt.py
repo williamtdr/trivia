@@ -1,6 +1,7 @@
 import sys
 import inquirer
 from ie_solution import eval, setup, stop
+from termcolor import colored
 
 # ask to load in the context
 # options 1. ask question 2. load new context 3. quit the program
@@ -43,8 +44,18 @@ def prompt():
         question = inquirer.prompt(Q)['question']
         answer = eval(contentInput, question)
         if not answer[0]:
-            # todo: highlight the answer in the original text
-            print(f">>> Model predicted: {answer[2]} starting at index {answer[1]} in text.")
+            start, end = answer[1], answer[2]
+            answer = contentInput[start:end].strip()
+
+            print("***")
+            print(
+                colored(contentInput[0:start], 'yellow'),
+                colored(contentInput[start:end], 'magenta'),
+                colored(contentInput[end:], 'yellow'),
+                sep=''
+            )
+            print("***")
+            print(f">>> Model predicted: {answer}")
         else:
             print(">>> Model predicted: Question is impossible.")
 
@@ -60,6 +71,7 @@ def prompt():
         prompt()
     elif opt['options'] == "Quit":
         print("Goodbye!")
+        stop()
         exit(0)
 
         return
