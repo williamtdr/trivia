@@ -226,6 +226,7 @@ def extractor(context, contextPOS, contextTokens, contextNamedEntities, contextI
     hasAnswerInKnowledgeBase = any((entity.lower() in x for x in simpleFlatKnowledgeBase)
                                    for entity in allPotentialSubjects)
     answers = list(set(answers))
+    answers = list(filter(lambda x: x[1].lower() not in list(map(lambda y: y.lower(), allPotentialSubjects)), answers))
 
     print("FEASIBILITY ANALYSIS:")
     if realAnswers is not None:
