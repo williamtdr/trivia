@@ -152,27 +152,28 @@ def evaluate(topics):
 
     return rightTotal, wrongTotal
 
-fileName = "squad-train-v2.0.json" if USE_PRODUCTION_DATA else "squad-dev-v2.0.json"
-print(f"Loading SQuAD Dataset ({'Training' if USE_PRODUCTION_DATA else 'Dev'})...")
+if __name__ == '__main__':
+    fileName = "squad-train-v2.0.json" if USE_PRODUCTION_DATA else "squad-dev-v2.0.json"
+    print(f"Loading SQuAD Dataset ({'Training' if USE_PRODUCTION_DATA else 'Dev'})...")
 
-with open('data/' + fileName) as f:
-    data = json.load(f)
+    with open('data/' + fileName) as f:
+        data = json.load(f)
 
-print("Preparing model...")
-setup(MANAGE_CORENLP_INTERNALLY)
+    print("Preparing model...")
+    setup(MANAGE_CORENLP_INTERNALLY)
 
-cmdLineArgs = sys.argv[1:]
-concurrency = mp.cpu_count()
-if len(cmdLineArgs) >= 1:
-    concurrency = int(cmdLineArgs[0])
-    print(f"Starting {concurrency} threads based on command line argument.")
-else:
-    print(f"Starting {concurrency} threads based on number of processors.")
+    cmdLineArgs = sys.argv[1:]
+    concurrency = mp.cpu_count()
+    if len(cmdLineArgs) >= 1:
+        concurrency = int(cmdLineArgs[0])
+        print(f"Starting {concurrency} threads based on command line argument.")
+    else:
+        print(f"Starting {concurrency} threads based on number of processors.")
 
-pool = mp.Pool(concurrency)
-findBaselineStats(data['data'])
-right, wrong = evaluate(data['data'])
+    pool = mp.Pool(concurrency)
+    findBaselineStats(data['data'])
+    right, wrong = evaluate(data['data'])
 
-print(f"Evaluation complete. Correct: {str(right)}/{str(right + wrong)}")
-print("Stopping dependent systems...")
-stop()
+    print(f"Evaluation complete. Correct: {str(right)}/{str(right + wrong)}")
+    print("Stopping dependent systems...")
+    stop()
