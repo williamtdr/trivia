@@ -6,6 +6,7 @@ from nltk.parse.corenlp import CoreNLPServer, CoreNLPParser
 from requests.exceptions import HTTPError
 import itertools
 import requests
+from qanet_integration import getAnswer, setupQANet
 
 # import tensorflow as tf
 # from tensorflow import keras
@@ -45,6 +46,8 @@ def setup(manageServerInternally=False):
             print("The relevant command can be found in the README.")
 
             exit(1)
+
+    setupQANet()
 
 
 def accumulateLongestSequence(acc, token):
@@ -88,7 +91,7 @@ def accumulateString(acc, token):
 
 
 def extractor(context, contextPOS, contextTokens, contextNamedEntities, contextInformationExtraction,
-              questionPOS, questionTokens, questionNamedEntities, questionInformationExtraction,
+              questionText, questionPOS, questionTokens, questionNamedEntities, questionInformationExtraction,
               realAnswers = None):
     i = -1
     answers = []
@@ -261,6 +264,9 @@ def extractor(context, contextPOS, contextTokens, contextNamedEntities, contextI
 
         return True, 0, 0, nextGlobalStats
     else:
+        networkAnswer = getAnswer(context, questionText)
+        print("NETWORK ANSWERED:")
+        print(networkAnswer)
         print("ALL POTENTIAL ANSWERS:")
         print(answers)
 
@@ -315,7 +321,7 @@ def eval(context, question, answers = None):
         list(map(lambda x: x[2], contextResponse)), list(map(lambda x: x[3], contextResponse))
 
     return extractor(context, contextPOS, contextTokens, contextNamedEntities, contextInformationExtraction,
-                     questionPOS, questionTokens, questionNamedEntities, questionInformationExtraction,
+                     question, questionPOS, questionTokens, questionNamedEntities, questionInformationExtraction,
                      answers)
 
 
