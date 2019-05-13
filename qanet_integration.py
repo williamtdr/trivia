@@ -3,10 +3,10 @@ import requests
 endpoint = "http://127.0.0.1:8080"
 
 def getAnswer(passage, question):
-    return requests.post(endpoint + "/answer", {
+    return requests.post(endpoint + "/answer", None, {
         'passage': passage,
         'question': question
-    })['answer']
+    }).json()['answer']
 
 def setupQANet():
     try:

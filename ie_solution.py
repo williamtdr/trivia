@@ -267,14 +267,16 @@ def extractor(context, contextPOS, contextTokens, contextNamedEntities, contextI
         networkAnswer = getAnswer(context, questionText)
         print("NETWORK ANSWERED:")
         print(networkAnswer)
-        print("ALL POTENTIAL ANSWERS:")
-        print(answers)
+        try:
+            index = context.index(networkAnswer)
+        except ValueError:
+            print("Failed to reconstruct based on faulty tokenization...")
+            # todo: don't pick random answer lol
+            finalAnswer = sample(answers, 1)[0]
 
-        finalAnswer = sample(answers, 1)[0]
-        print("FINAL ANSWER:")
-        print(finalAnswer)
+            return False, finalAnswer[0], len(finalAnswer[1]) + finalAnswer[0], nextGlobalStats
 
-        return False, finalAnswer[0], len(finalAnswer[1]) + finalAnswer[0], nextGlobalStats
+        return False, index, len(networkAnswer) + index, nextGlobalStats
 
 
 # (impossible (bool), starting index, ending index)
