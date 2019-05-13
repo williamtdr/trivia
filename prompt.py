@@ -1,7 +1,8 @@
 import sys
-import inquirer
+import PyInquirer 
 from ie_solution import eval, setup, stop
 from termcolor import colored
+from PyInquirer import prompt, print_json
 
 # ask to load in the context
 # options 1. ask question 2. load new context 3. quit the program
@@ -11,9 +12,14 @@ contentInput = ""
 def content():
     global contentInput
 
-    content = [
-      inquirer.Text('context', message="Please input your context")]
-    articles = inquirer.prompt(content)
+    articles = prompt([
+        {
+            'type': 'input',
+            'name': 'context',
+            'message': 'Please input your context:'
+        }
+    ])
+    
     if articles == None:
         exit(0)
 
@@ -24,15 +30,17 @@ def content():
 
 def option():
     options = [
-        inquirer.List('options',
-                message="Choose one option",
-                choices=['Ask a question', 'Load new context', 'Add context', 'Quit'],
-            ),
+        {
+            'type': 'list',
+            'name': 'options',
+            'message': 'What do you want to do next?',
+            'choices': ['Ask a question', 'Load new context', 'Add context', 'Quit']
+        }
     ]
-    optionchosen = inquirer.prompt(options)
+    optionchosen = prompt(options)
     return optionchosen
 
-def prompt():
+def menu():
     global contentInput
     opt = option()
 
@@ -40,8 +48,14 @@ def prompt():
         exit(0)
 
     if opt['options'] == "Ask a question":
-        Q = [inquirer.Text('question', message="Please type your question")]
-        question = inquirer.prompt(Q)['question']
+        Q = [
+            {
+                'type': 'input',
+                'name': 'question',
+                'message': 'Please type your question:'
+            }
+        ]
+        question = prompt(Q)['question']
         answer = eval(contentInput, question)
         if not answer[0]:
             start, end = answer[1], answer[2]
@@ -59,16 +73,16 @@ def prompt():
         else:
             print(">>> Model predicted: Question is impossible.")
 
-        prompt()
+        menu()
     elif opt['options'] == "Load new context":
         contentInput = ""
         content()
-        prompt()
+        menu()
     elif opt['options'] == "Add context":
         oldcontent = contentInput
         content()
         contentInput = oldcontent + contentInput
-        prompt()
+        menu()
     elif opt['options'] == "Quit":
         print("Goodbye!")
         stop()
@@ -79,6 +93,6 @@ def prompt():
 setup(False)
 print("Welcome!")
 content()
-prompt()
+menu()
 
 #print(question)
